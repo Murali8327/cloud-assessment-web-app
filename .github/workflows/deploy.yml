@@ -1,0 +1,37 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Build Docker image
+      run: |
+        docker build -t my-web-app:latest .
+
+    - name: Copy files to EC2 and deploy
+      env:
+        EC2_HOST: 54.160.237.196
+        EC2_USER: ubuntu
+        EC2_KEY: ${{ secrets.EC2_SSH_KEY }}
+      run: |
+        echo "$EC2_KEY" > ec2_key.pem
+        chmod 600 ec2_key.pem
+        scp -i ec2_key.pem -o StrictHostKeyChecking=no Dockerfile $EC2_USER@$EC2_HOST:/home/ubuntu/
+        scp -i ec2_key.pem -o StrictHostKeyChecking=no app.py $EC2_USER@$EC2_HOST:/home/ubuntu/
+        scp -i ec2_key.pem -o StrictHostKeyChecking=no requirements.txt $EC2_USER@$EC2_HOST:/home/ubuntu/
+        scp -i ec2_key.pem -o StrictHostKeyChecking=no deploy.sh $EC2_USER@$EC2_HOST:/home/ubuntu/
+        ssh -i ec2_key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
+          chmod +x deploy.sh
+          ./deploy.sh
+        EOF
+        rm ec2_key.pem
